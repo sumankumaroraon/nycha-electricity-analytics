@@ -1,0 +1,4 @@
+scenario,factor,basis
+Low,0.7081470435771553,Lowest annual portfolio effective cost 0.1220 $/kWh relative to 2022 (0.1722)
+Base,1.0,Each development's same-month 2022 effective cost
+High,1.2042434816184568,Largest annual portfolio effective-cost increase in the window (+20.4%)

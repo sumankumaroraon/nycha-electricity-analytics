@@ -1,0 +1,6 @@
+tds,development_name,borough,sarima_order,months_scored,months_not_scored,baseline_mae,baseline_wape,sarima_mae,sarima_wape,selected_method,selection_reason
+53,POMONOK,QUEENS,"(0, 0, 0)x(0, 1, 0, 12)",12,0,159236.66666666666,0.16000897666068223,159236.66666666672,0.16000897666068226,Seasonal naive,"Tie: AIC selected a seasonal random walk, which reproduces the baseline; simpler baseline kept"
+57,EDENWALD,BRONX,"(0, 0, 0)x(0, 1, 0, 12)",12,0,76656.66666666667,0.06924012597325176,76656.66666666676,0.06924012597325185,Seasonal naive,"Tie: AIC selected a seasonal random walk, which reproduces the baseline; simpler baseline kept"
+74,WAGNER,MANHATTAN,"(0, 0, 0)x(1, 1, 0, 12)",10,2,98124.0,0.07621470980249606,90568.27277913978,0.0703460379435759,SARIMA,SARIMA has lower WAPE
+80,CASTLE HILL,BRONX,"(1, 0, 0)x(0, 1, 0, 12)",12,0,59816.666666666664,0.04485633225431503,71482.69120641798,0.053604647765745694,Seasonal naive,Seasonal naive has lower WAPE
+87,GRANT,MANHATTAN,"(0, 0, 0)x(0, 1, 0, 12)",12,0,100683.33333333333,0.09269602577873255,100683.33333333344,0.09269602577873265,Seasonal naive,"Tie: AIC selected a seasonal random walk, which reproduces the baseline; simpler baseline kept"

@@ -1,0 +1,8 @@
+pandas>=2.1
+numpy>=1.26
+statsmodels>=0.14
+matplotlib>=3.8
+duckdb>=1.1
+jupyter>=1.0
+nbclient>=0.10
+pytest>=8.0

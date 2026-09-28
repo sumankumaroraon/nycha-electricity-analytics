@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NYCHA electricity: what drove the bill</title>
+<meta name="description" content="Electricity consumption, cost drivers, billing exceptions and forecasts for NYC Housing Authority developments, built from NYC Open Data.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --paper: #F3F5F4; --panel: #FFFFFF; --ink: #16202E; --muted: #5E6B78; --rule: #D8DEDB;
+    --teal: #1B7F79; --teal-soft: #A9D3CF; --amber: #D9961A; --up: #B23A48; --down: #3F7D20; --total: #27466B;
+    --font: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--font); font-size: 15px;
+         line-height: 1.5; font-variant-numeric: tabular-nums; }
+  a { color: var(--total); text-underline-offset: 2px; }
+  :focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 0 24px; }
+
+  /* Masthead + hero */
+  .masthead { padding: 28px 0 0; display: flex; justify-content: space-between; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+  .masthead .title { font-stretch: 112%; font-weight: 650; font-size: 17px; margin: 0; }
+  .masthead .src { color: var(--muted); font-size: 13px; }
+  .hero { padding: 36px 0 28px; }
+  .hero h1 { font-stretch: 125%; font-weight: 600; font-size: clamp(28px, 4.2vw, 48px); line-height: 1.08;
+             letter-spacing: -0.01em; margin: 0; max-width: 30ch; text-wrap: balance; }
+  .hero p { color: var(--muted); font-size: 17px; max-width: 64ch; margin: 16px 0 0; text-wrap: pretty; }
+
+  /* Filters + tabs */
+  .controls { position: sticky; top: 0; z-index: 5; background: var(--paper); border-bottom: 1px solid var(--rule); }
+  .filters { display: flex; gap: 20px; align-items: end; flex-wrap: wrap; padding: 12px 0; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 12px; color: var(--muted); }
+  select, input[type=search] { font: inherit; font-size: 14px; color: var(--ink); background: var(--panel);
+    border: 1px solid var(--rule); border-radius: 3px; padding: 7px 10px; min-width: 120px; }
+  input[type=search] { min-width: 260px; }
+  .clear { font: inherit; font-size: 13px; background: none; border: 0; color: var(--total); cursor: pointer;
+           text-decoration: underline; padding: 8px 0; }
+  .tabs { display: flex; gap: 28px; }
+  .tab { font: inherit; font-size: 15px; font-weight: 550; background: none; border: 0; padding: 10px 0 12px;
+         color: var(--muted); cursor: pointer; border-bottom: 3px solid transparent; }
+  .tab[aria-selected=true] { color: var(--ink); border-bottom-color: var(--ink); }
+
+  /* KPI strip: reads like the summary box on a utility bill */
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); background: var(--panel); border: 1px solid var(--rule);
+          border-radius: 4px; margin: 24px 0; }
+  .kpi { padding: 18px 20px; border-left: 1px solid var(--rule); }
+  .kpi:first-child { border-left: 0; }
+  .kpi .lab { font-size: 13px; color: var(--muted); }
+  .kpi .val { font-stretch: 118%; font-weight: 600; font-size: 30px; line-height: 1.15; margin-top: 4px; }
+  .kpi .delta { font-size: 13px; margin-top: 4px; color: var(--muted); }
+  .up { color: var(--up); } .down { color: var(--down); }
+
+  section[role=tabpanel] { padding-bottom: 48px; }
+  section[hidden] { display: none; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .grid-wf { display: grid; grid-template-columns: 1.35fr 1fr; gap: 24px; }
+  .panel { background: var(--panel); border: 1px solid var(--rule); border-radius: 4px; padding: 20px 22px; margin-bottom: 24px; }
+  .panel h2 { font-size: 17px; font-weight: 650; margin: 0 0 2px; }
+  .panel .q { color: var(--muted); font-size: 13.5px; margin: 0 0 14px; max-width: 72ch; }
+  .note { color: var(--muted); font-size: 12.5px; margin: 10px 0 0; max-width: 90ch; }
+  .chart { position: relative; height: 300px; }
+  .chart.tall { height: 420px; }
+  .chart.short { height: 240px; }
+  .lfl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border-top: 1px solid var(--rule); margin-top: 16px; }
+  .lfl div { padding: 12px 12px 0 0; }
+  .lfl b { display: block; font-stretch: 115%; font-size: 22px; font-weight: 600; }
+  .lfl span { font-size: 12.5px; color: var(--muted); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12.5px; padding: 8px 10px 8px 0;
+       border-bottom: 1px solid var(--ink); white-space: nowrap; }
+  td { padding: 9px 10px 9px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  td.n, th.n { text-align: right; white-space: nowrap; }
+  td.nw { white-space: nowrap; }
+  tr.click { cursor: pointer; } tr.click:hover td { background: #F7F9F8; }
+  .tablewrap { overflow-x: auto; }
+  .ev { color: var(--muted); font-size: 12.5px; display: block; margin-top: 2px; }
+  .issue { display: inline-block; font-size: 12px; padding: 1px 7px; border-radius: 10px; background: #EEF1EF; white-space: nowrap; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+  .chip { font: inherit; font-size: 13px; padding: 5px 12px; border: 1px solid var(--rule); background: var(--panel);
+          border-radius: 16px; cursor: pointer; color: var(--ink); }
+  .chip[aria-pressed=true] { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .more { font: inherit; margin-top: 12px; background: var(--panel); border: 1px solid var(--rule); padding: 7px 14px;
+          border-radius: 3px; cursor: pointer; }
+  .empty { padding: 28px 0; color: var(--muted); }
+  .method { font-weight: 600; }
+  footer { border-top: 1px solid var(--rule); padding: 28px 0 48px; color: var(--muted); font-size: 13.5px; }
+  footer .cols { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 28px; }
+  footer h3 { font-size: 14px; color: var(--ink); margin: 0 0 6px; }
+  footer ul { margin: 0; padding-left: 18px; }
+
+  @media (max-width: 900px) {
+    .controls { position: static; }
+    .grid2, .grid-wf, footer .cols { grid-template-columns: 1fr; }
+    .kpis { grid-template-columns: 1fr 1fr; }
+    .kpi:nth-child(3) { border-left: 0; }
+    .kpi:nth-child(n+3) { border-top: 1px solid var(--rule); }
+    input[type=search] { min-width: 200px; }
+  }
+  @media (max-width: 520px) { .wrap { padding: 0 14px; } .tabs { gap: 16px; } .tab { font-size: 14px; } .kpi .val { font-size: 24px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="masthead">
+    <p class="title">NYCHA electricity analytics</p>
+    <p class="src" id="srcline"></p>
+  </header>
+  <div class="hero">
+    <h1 id="headline">Loading…</h1>
+    <p id="subhead"></p>
+  </div>
+</div>
+
+<div class="controls">
+  <div class="wrap">
+    <div class="filters" role="group" aria-label="Filters">
+      <div class="field"><label for="fYear">Year</label><select id="fYear"></select></div>
+      <div class="field"><label for="fBorough">Borough</label><select id="fBorough"></select></div>
+      <div class="field"><label for="fDev">Development</label>
+        <input type="search" id="fDev" list="devList" placeholder="All developments" autocomplete="off">
+        <datalist id="devList"></datalist></div>
+      <button class="clear" id="clearBtn" type="button">Reset filters</button>
+    </div>
+    <div class="tabs" role="tablist" aria-label="Dashboard pages">
+      <button class="tab" role="tab" id="t1" aria-controls="p1" aria-selected="true">Portfolio overview</button>
+      <button class="tab" role="tab" id="t2" aria-controls="p2" aria-selected="false" tabindex="-1">Cost drivers and exceptions</button>
+      <button class="tab" role="tab" id="t3" aria-controls="p3" aria-selected="false" tabindex="-1">Forecast and planning</button>
+    </div>
+  </div>
+</div>
+
+<main class="wrap">
+  <div class="kpis" id="kpis" aria-live="polite"></div>
+
+  <section role="tabpanel" id="p1" aria-labelledby="t1">
+    <div class="panel">
+      <h2>Monthly consumption and effective cost</h2>
+      <p class="q">Bars show consumption; the line shows what each kWh cost once all bill charges are included. The selected year is shaded darker.</p>
+      <div class="chart"><canvas id="cTrend" aria-label="Monthly consumption and effective cost chart" role="img"></canvas></div>
+      <p class="note">Effective cost = total reported charges ÷ total kWh. It includes demand and other charges, so it is not a tariff rate. Months with fewer bills than usual understate consumption.</p>
+    </div>
+    <div class="grid2">
+      <div class="panel">
+        <h2>Where spending is concentrated</h2>
+        <p class="q" id="concNote">Top 15 developments by spending. Select a bar to filter the dashboard.</p>
+        <div class="chart tall"><canvas id="cTop" role="img" aria-label="Top developments by spending"></canvas></div>
+      </div>
+      <div class="panel">
+        <h2>Spending by borough</h2>
+        <p class="q">Share of spending and effective cost per kWh in the selected year.</p>
+        <div class="tablewrap"><table id="tBorough"></table></div>
+      </div>
+    </div>
+  </section>
+
+  <section role="tabpanel" id="p2" aria-labelledby="t2" hidden>
+    <div class="grid-wf">
+      <div class="panel">
+        <h2 id="wfTitle">What changed spending</h2>
+        <p class="q">Each development-month is compared with the same month a year earlier. Changes where either month has no consumption are shown separately, so the bridge always adds up.</p>
+        <div class="chart"><canvas id="cWf" role="img" aria-label="Year-over-year cost bridge"></canvas></div>
+        <div class="lfl" id="lfl"></div>
+        <p class="note">This is an accounting split, not proof that a tariff changed. Consumption effect = change in kWh × last year's cost per kWh. Effective-cost effect = this year's kWh × change in cost per kWh.</p>
+      </div>
+      <div class="panel">
+        <h2>Bill components by year</h2>
+        <p class="q">Which reported line on the bill moved.</p>
+        <div class="chart"><canvas id="cComp" role="img" aria-label="Bill components by year"></canvas></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Largest changes by development</h2>
+      <p class="q">Developments ranked by the size of their spending change against the prior year. Select a row to filter.</p>
+      <div class="tablewrap"><table id="tMovers"></table></div>
+    </div>
+    <div class="panel">
+      <h2>Records that need investigation</h2>
+      <p class="q" id="invSummary"></p>
+      <div class="chips" id="issueChips" role="group" aria-label="Filter by issue"></div>
+      <div class="tablewrap"><table id="tInv"></table></div>
+      <button class="more" id="invMore" type="button">Show 25 more</button>
+      <p class="note">"Requires investigation" means the dataset cannot establish the cause. High consumption alone does not prove inefficiency. Record numbers refer to rows in the source file.</p>
+    </div>
+  </section>
+
+  <section role="tabpanel" id="p3" aria-labelledby="t3" hidden>
+    <div class="panel">
+      <h2>How well each approach forecast the test year</h2>
+      <p class="q" id="fcIntro"></p>
+      <div class="chips" id="fcChips" role="group" aria-label="Choose a development"></div>
+      <div class="chart"><canvas id="cBack" role="img" aria-label="Forecast backtest"></canvas></div>
+      <div class="tablewrap" style="margin-top:18px"><table id="tMetrics"></table></div>
+      <p class="note">Rolling one-month-ahead forecasts: each prediction uses only months before it. WAPE = total absolute error ÷ total actual consumption. Months with missing bills or a change in reporting meters are not scored.</p>
+    </div>
+    <div class="panel">
+      <h2>Planning outlook for the next 12 months</h2>
+      <p class="q" id="outIntro"></p>
+      <div class="chips" id="scChips" role="group" aria-label="Choose a cost scenario"></div>
+      <div class="grid2">
+        <div><div class="chart short"><canvas id="cOutK" role="img" aria-label="Forecast consumption"></canvas></div></div>
+        <div><div class="chart short"><canvas id="cOutC" role="img" aria-label="Planning spend estimate"></canvas></div></div>
+      </div>
+      <p class="note" id="scNote"></p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap cols">
+    <div>
+      <h3>About the data</h3>
+      <p id="aboutData"></p>
+    </div>
+    <div>
+      <h3>How it was cleaned</h3>
+      <p id="aboutClean"></p>
+    </div>
+    <div>
+      <h3>Project files</h3>
+      <ul id="links"></ul>
+    </div>
+  </div>
+</footer>
+
+<script>
+const D = /*__DATA__*/null;
+(function () {
+  "use strict";
+  const $ = (s) => document.querySelector(s);
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const C = { ink: "#16202E", muted: "#5E6B78", rule: "#D8DEDB", teal: "#1B7F79", tealSoft: "#A9D3CF",
+              amber: "#D9961A", up: "#B23A48", down: "#3F7D20", total: "#27466B", other: "#C7CFCB" };
+
+  // ---------- formatting ----------
+  const money = (v, d) => {
+    if (v == null || !isFinite(v)) return "–";
+    const a = Math.abs(v), s = v < 0 ? "−\u2060" : "";
+    if (a >= 1e6) return `${s}$${(a / 1e6).toFixed(d ?? 1)}M`;
+    if (a >= 1e3) return `${s}$${(a / 1e3).toFixed(d ?? 0)}K`;
+    return `${s}$${a.toFixed(0)}`;
+  };
+  const energy = (kwh) => kwh >= 1e9 ? `${(kwh / 1e9).toFixed(2)} TWh` : kwh >= 1e6 ? `${(kwh / 1e6).toFixed(1)} GWh`
+                          : `${(kwh / 1e3).toFixed(0)} MWh`;
+  const pct = (v, d = 1) => (v == null || !isFinite(v)) ? "–" : `${v > 0 ? "+\u2060" : v < 0 ? "−\u2060" : ""}${Math.abs(v * 100).toFixed(d)}%`;
+  const rate = (v) => (v == null || !isFinite(v)) ? "–" : `$${v.toFixed(3)}`;
+  const nice = (s) => s.split(" ").map((w) => /^\(?[IVX]+\)?$/.test(w) || /^[A-Z]\.?$/.test(w) ? w
+                        : w.charAt(0) + w.slice(1).toLowerCase()).join(" ").replace(/(^|[\s(\-])([a-z])/g, (m, p, c) => p + c.toUpperCase());
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const deltaCls = (v, goodWhenDown) => v == null || !isFinite(v) || Math.abs(v) < 0.0005 ? "" : (v > 0) === !goodWhenDown ? "up" : "down";
+
+  // ---------- data model ----------
+  const months = D.months, years = [...new Set(months.map((m) => +m.slice(0, 4)))];
+  const devs = D.devs.map(([tds, name, borough]) => ({ tds, name, borough, label: nice(name) }));
+  const devBy = Object.fromEntries(devs.map((d) => [d.tds, d]));
+  const boroughs = [...new Set(devs.map((d) => d.borough))].sort();
+  const idxOf = (y, m) => months.indexOf(`${y}-${String(m).padStart(2, "0")}`);
+  const yearIdx = (y) => months.map((m, i) => (m.startsWith(y + "-") ? i : -1)).filter((i) => i >= 0);
+
+  const state = { year: years[years.length - 1], borough: "", tds: null, tab: "p1", issue: -1, invShown: 25,
+                  fcTds: D.forecast[0]?.tds, scenario: "base" };
+
+  const scope = () => devs.filter((d) => (!state.borough || d.borough === state.borough) && (!state.tds || d.tds === state.tds));
+  const subject = () => state.tds ? devBy[state.tds].label : state.borough ? `${nice(state.borough)} developments`
+                                   : `NYCHA's ${devs.length} developments`;
+
+  function totals(list, idx) {
+    let k = 0, c = 0, e = 0, dm = 0, o = 0, missing = 0, reporting = new Set();
+    for (const d of list) {
+      const s = D.series[d.tds];
+      for (const i of idx) {
+        if (s.k[i] == null) { missing++; continue; }
+        k += s.k[i]; c += s.c[i]; e += s.e[i]; dm += s.d[i]; o += s.o[i]; reporting.add(d.tds);
+      }
+    }
+    return { k, c, e, dem: dm, o, r: k > 0 ? c / k : null, missing, reporting: reporting.size };
+  }
+
+  function bridge(list, y) {
+    const b = { prior: 0, cons: 0, rate: 0, nc: 0, cur: 0, lk0: 0, lk1: 0, lc0: 0, lc1: 0, n: 0, pairs: 0, byDev: [] };
+    for (const d of list) {
+      const s = D.series[d.tds]; let dc0 = 0, dc1 = 0, dk0 = 0, dk1 = 0;
+      for (let m = 1; m <= 12; m++) {
+        const i1 = idxOf(y, m), i0 = idxOf(y - 1, m);
+        if (i1 < 0 || i0 < 0) continue;
+        const q0 = s.k[i0] ?? 0, c0 = s.c[i0] ?? 0, q1 = s.k[i1] ?? 0, c1 = s.c[i1] ?? 0;
+        b.prior += c0; b.cur += c1; b.pairs++; dc0 += c0; dc1 += c1; dk0 += q0; dk1 += q1;
+        if (q0 > 0 && q1 > 0) {
+          const r0 = c0 / q0;
+          b.cons += (q1 - q0) * r0; b.rate += c1 - q1 * r0;
+          b.lk0 += q0; b.lk1 += q1; b.lc0 += c0; b.lc1 += c1; b.n++;
+        } else b.nc += c1 - c0;
+      }
+      b.byDev.push({ d, c0: dc0, c1: dc1, k0: dk0, k1: dk1 });
+    }
+    return b;
+  }
+
+  // ---------- charts ----------
+  const charts = {};
+  Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+  Chart.defaults.font.size = 12;
+  Chart.defaults.color = C.muted;
+  Chart.defaults.borderColor = C.rule;
+  Chart.defaults.animation = reduce ? false : { duration: 350 };
+  Chart.defaults.plugins.legend.labels.boxWidth = 12;
+  Chart.defaults.plugins.legend.labels.boxHeight = 12;
+  Chart.defaults.maintainAspectRatio = false;
+  const valueLabels = {
+    id: "valueLabels",
+    afterDatasetsDraw(chart) {
+      const texts = chart.options.plugins.valueLabels?.texts; if (!texts) return;
+      const { ctx } = chart; const meta = chart.getDatasetMeta(0);
+      ctx.save(); ctx.fillStyle = C.ink; ctx.font = `600 12px ${Chart.defaults.font.family}`; ctx.textAlign = "center";
+      meta.data.forEach((bar, i) => { const top = Math.min(bar.y, bar.base); ctx.fillText(texts[i], bar.x, top - 6); });
+      ctx.restore();
+    },
+  };
+  function draw(id, cfg) { if (charts[id]) charts[id].destroy(); charts[id] = new Chart($(id), cfg); }
+  const moneyTick = (v) => money(v, Math.abs(v) >= 1e6 && Math.abs(v) < 1e7 ? 1 : 0);
+
+  // ---------- render: header + KPIs ----------
+  function renderHeader() {
+    const list = scope(), y = state.year;
+    const cur = totals(list, yearIdx(y)), pri = years.includes(y - 1) ? totals(list, yearIdx(y - 1)) : null;
+    const dc = pri && pri.c ? cur.c / pri.c - 1 : null, dk = pri && pri.k ? cur.k / pri.k - 1 : null;
+    const dr = pri && pri.r ? cur.r / pri.r - 1 : null;
+    let h;
+    if (dc == null) h = `In ${y}, ${subject()} spent ${money(cur.c)} on electricity for ${energy(cur.k)}.`;
+    else {
+      const cv = dc >= 0 ? "rose" : "fell", kv = dk >= 0 ? "rose" : "fell";
+      const join = (dc >= 0) !== (dk >= 0) ? "while" : "and";
+      h = `In ${y}, electricity spending at ${subject()} ${cv} ${pct(Math.abs(dc))} to ${money(cur.c)} ${join} consumption ${kv} ${pct(Math.abs(dk))}.`
+            .replace(/\+\u2060?/g, "");
+    }
+    $("#headline").textContent = h;
+    const b = pri ? bridge(list, y) : null;
+    $("#subhead").textContent = b && b.lk0 > 0
+      ? `Comparing only months billed in both years, consumption changed ${pct(b.lk1 / b.lk0 - 1)} and cost per kWh changed ${pct((b.lc1 / b.lk1) / (b.lc0 / b.lk0) - 1)}. The effective-cost effect was ${money(b.rate)} against ${money(b.cons)} from consumption.`
+      : `Pick a later year to compare against the year before.`;
+
+    const kp = [
+      ["Consumption", energy(cur.k), dk, false, "vs " + (y - 1)],
+      ["Electricity spending", money(cur.c), dc, false, "vs " + (y - 1)],
+      ["Effective cost per kWh", rate(cur.r), dr, false, "vs " + (y - 1)],
+      ["Developments reporting", `${cur.reporting}`, null, false, `${cur.missing} development-months without bills`],
+    ];
+    $("#kpis").innerHTML = kp.map(([lab, val, d, good, cmp]) =>
+      `<div class="kpi"><div class="lab">${lab}</div><div class="val">${val}</div>
+       <div class="delta">${d == null ? esc(cmp) : `<span class="${deltaCls(d, good)}">${d >= 0 ? "▲" : "▼"} ${pct(d)}</span> ${esc(cmp)}`}</div></div>`).join("");
+  }
+
+  // ---------- page 1 ----------
+  function renderOverview() {
+    const list = scope();
+    const k = [], c = [], r = [];
+    months.forEach((m, i) => { const t = totals(list, [i]); k.push(t.k); c.push(t.c); r.push(t.r); });
+    const sel = months.map((m) => m.startsWith(state.year + "-"));
+    draw("#cTrend", {
+      data: { labels: months, datasets: [
+        { type: "bar", label: "Consumption (GWh)", data: k.map((v) => v / 1e6), yAxisID: "y",
+          backgroundColor: sel.map((s) => (s ? C.teal : C.tealSoft)), borderRadius: 1 },
+        { type: "line", label: "Effective cost ($/kWh)", data: r, yAxisID: "y1", borderColor: C.amber, backgroundColor: C.amber,
+          borderWidth: 2.2, pointRadius: 0, tension: 0.25, spanGaps: true } ] },
+      options: { interaction: { mode: "index", intersect: false },
+        plugins: { legend: { position: "top", align: "start" },
+          tooltip: { callbacks: { label: (x) => x.datasetIndex ? ` ${rate(x.raw)} per kWh` : ` ${x.raw.toFixed(2)} GWh · ${money(c[x.dataIndex])}` } } },
+        scales: { x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true, callback: (v, i) => months[i].endsWith("-01") ? months[i].slice(0, 4) : "" } },
+          y: { title: { display: true, text: "GWh" }, beginAtZero: true },
+          y1: { position: "right", grid: { display: false }, ticks: { callback: (v) => "$" + v.toFixed(2) } } } },
+    });
+
+    const idx = yearIdx(state.year);
+    const base = devs.filter((d) => !state.borough || d.borough === state.borough);
+    const rows = base.map((d) => ({ d, ...totals([d], idx) })).filter((x) => x.c > 0).sort((a, b) => b.c - a.c);
+    const all = rows.reduce((s, x) => s + x.c, 0);
+    const top = rows.slice(0, 15);
+    let cum = 0, n80 = 0; for (const x of rows) { cum += x.c; n80++; if (cum >= 0.8 * all) break; }
+    $("#concNote").textContent = `${n80} of ${rows.length} developments account for 80% of ${state.year} spending. Select a bar to filter the dashboard.`;
+    draw("#cTop", {
+      type: "bar",
+      data: { labels: top.map((x) => x.d.label), datasets: [{ data: top.map((x) => x.c),
+        backgroundColor: top.map((x) => (state.tds === x.d.tds ? C.amber : C.total)), borderRadius: 1 }] },
+      options: { indexAxis: "y", plugins: { legend: { display: false },
+          tooltip: { callbacks: { label: (x) => ` ${money(x.raw)} · ${(100 * x.raw / all).toFixed(1) + "%"} of spending · ${rate(top[x.dataIndex].r)}/kWh` } } },
+        scales: { x: { ticks: { callback: moneyTick } }, y: { grid: { display: false }, ticks: { color: C.ink } } },
+        onClick: (e, els) => { if (els.length) setDev(top[els[0].index].d.tds); },
+        onHover: (e, els) => { e.native.target.style.cursor = els.length ? "pointer" : "default"; } },
+    });
+
+    const bRows = boroughs.map((b) => ({ b, ...totals(devs.filter((d) => d.borough === b && (!state.tds || d.tds === state.tds)), idx) }));
+    const bAll = bRows.reduce((s, x) => s + x.c, 0);
+    $("#tBorough").innerHTML = `<thead><tr><th>Borough</th><th class="n">Spending</th><th class="n">Share</th><th class="n">Consumption</th><th class="n">$/kWh</th></tr></thead><tbody>` +
+      bRows.sort((a, b) => b.c - a.c).map((x) => `<tr class="click" data-b="${esc(x.b)}" tabindex="0"><td>${esc(nice(x.b))}${state.borough === x.b ? " ✓" : ""}</td>
+        <td class="n">${money(x.c)}</td><td class="n">${bAll ? (100 * x.c / bAll).toFixed(1) + "%" : "–"}</td>
+        <td class="n">${energy(x.k)}</td><td class="n">${rate(x.r)}</td></tr>`).join("") + "</tbody>";
+  }
+
+  // ---------- page 2 ----------
+  function renderDrivers() {
+    const list = scope(), y = state.year;
+    if (!years.includes(y - 1)) {
+      $("#wfTitle").textContent = `What changed spending`;
+      if (charts["#cWf"]) { charts["#cWf"].destroy(); delete charts["#cWf"]; }
+      $("#lfl").innerHTML = `<div class="empty" style="grid-column:1/-1">${y} is the first year in the data, so there is no prior year to compare. Choose a later year.</div>`;
+    } else {
+      const b = bridge(list, y);
+      $("#wfTitle").textContent = `What changed spending, ${y - 1} to ${y}`;
+      const steps = [[["Prior-year", "cost"], b.prior, "t"], [["Consumption", "effect"], b.cons, "d"], [["Effective-cost", "effect"], b.rate, "d"],
+                     [["Non-comparable", "months"], b.nc, "d"], [[`${y}`, "cost"], b.cur, "t"]];
+      let run = 0; const bars = [], cols = [], texts = [];
+      for (const [, v, kind] of steps) {
+        if (kind === "t") { bars.push([0, v]); run = v; cols.push(C.total); texts.push(money(v)); }
+        else { bars.push([run, run + v]); run += v; cols.push(v > 0 ? C.up : C.down); texts.push((v >= 0 ? "+" : "") + money(v)); }
+      }
+      const levels = bars.slice(1, -1).flat().concat([b.prior, b.cur]);
+      const lo = Math.min(...levels);
+      draw("#cWf", { type: "bar", plugins: [valueLabels],
+        data: { labels: steps.map((s) => s[0]), datasets: [{ data: bars, backgroundColor: cols, borderSkipped: false, barPercentage: 0.7 }] },
+        options: { layout: { padding: { top: 22 } }, plugins: { legend: { display: false }, valueLabels: { texts },
+            tooltip: { callbacks: { label: (x) => " " + texts[x.dataIndex] } } },
+          scales: { x: { grid: { display: false }, ticks: { color: C.ink, maxRotation: 0 } },
+            y: { min: lo > 0 ? Math.floor(lo * 0.9 / 1e6) * 1e6 : undefined, ticks: { callback: moneyTick } } } } });
+      $("#lfl").innerHTML = b.lk0 > 0 ? `
+        <div><b>${pct(b.lk1 / b.lk0 - 1)}</b><span>consumption, like-for-like</span></div>
+        <div><b>${pct(b.lc1 / b.lc0 - 1)}</b><span>spending, like-for-like</span></div>
+        <div><b>${rate(b.lc0 / b.lk0)} → ${rate(b.lc1 / b.lk1)}</b><span>effective cost per kWh</span></div>`
+        : `<div class="empty" style="grid-column:1/-1">No months were billed in both years for this selection.</div>`;
+
+      const movers = b.byDev.filter((x) => x.c0 || x.c1).sort((a, c) => Math.abs(c.c1 - c.c0) - Math.abs(a.c1 - a.c0)).slice(0, 12);
+      $("#tMovers").innerHTML = `<thead><tr><th>Development</th><th>Borough</th><th class="n">${y - 1}</th><th class="n">${y}</th><th class="n">Change</th><th class="n">Spending</th><th class="n">Consumption</th><th class="n">$/kWh ${y}</th></tr></thead><tbody>` +
+        movers.map((x) => { const dc = x.c0 ? x.c1 / x.c0 - 1 : null, dk = x.k0 ? x.k1 / x.k0 - 1 : null;
+          return `<tr class="click" data-tds="${x.d.tds}" tabindex="0"><td>${esc(x.d.label)}</td><td>${esc(nice(x.d.borough))}</td>
+            <td class="n">${money(x.c0)}</td><td class="n">${money(x.c1)}</td>
+            <td class="n ${deltaCls(x.c1 - x.c0)}">${x.c1 - x.c0 >= 0 ? "+" : ""}${money(x.c1 - x.c0)}</td>
+            <td class="n ${deltaCls(dc)}">${pct(dc)}</td><td class="n">${pct(dk)}</td><td class="n">${rate(x.k1 ? x.c1 / x.k1 : null)}</td></tr>`; }).join("") + "</tbody>";
+    }
+    if (years.includes(y - 1) === false) $("#tMovers").innerHTML = "";
+
+    const yrs = years;
+    const comp = yrs.map((yy) => totals(list, yearIdx(yy)));
+    draw("#cComp", { type: "bar",
+      data: { labels: yrs.map(String), datasets: [
+        { label: "Energy (kWh) charges", data: comp.map((t) => t.e), backgroundColor: C.total },
+        { label: "Demand (kW) charges", data: comp.map((t) => t.dem), backgroundColor: C.teal },
+        { label: "Other charges", data: comp.map((t) => t.o), backgroundColor: C.amber } ] },
+      options: { plugins: { legend: { position: "top", align: "start" }, tooltip: { callbacks: { label: (x) => ` ${x.dataset.label}: ${money(x.raw)}` } } },
+        scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, ticks: { callback: moneyTick } } } } });
+
+    renderInvestigations();
+  }
+
+  function renderInvestigations() {
+    const ok = new Set(scope().map((d) => d.tds));
+    const rows = D.inv.filter((r) => ok.has(r[1]) && months[r[2]].startsWith(state.year + "-"));
+    const counts = D.issues.map((_, i) => rows.filter((r) => r[3] === i).length);
+    $("#issueChips").innerHTML = [`<button class="chip" aria-pressed="${state.issue === -1}" data-i="-1">All issues (${rows.length})</button>`]
+      .concat(D.issues.map((s, i) => counts[i] ? `<button class="chip" aria-pressed="${state.issue === i}" data-i="${i}">${esc(s)} (${counts[i]})</button>` : "")).join("");
+    const shown = rows.filter((r) => state.issue === -1 || r[3] === state.issue).sort((a, b) => Math.abs(b[4]) - Math.abs(a[4]));
+    const net = shown.reduce((s, r) => s + r[4], 0);
+    $("#invSummary").textContent = shown.length
+      ? `${shown.length} development-months flagged in ${state.year}, ranked by dollar impact. Net impact ${money(net)}; each row is counted once under its largest issue.`
+      : `No development-months were flagged for this selection in ${state.year}.`;
+    $("#tInv").innerHTML = shown.length ? `<thead><tr><th>ID</th><th>Development</th><th>Month</th><th>Issue</th><th class="n">Impact</th><th>Evidence and next step</th></tr></thead><tbody>` +
+      shown.slice(0, state.invShown).map((r) => { const d = devBy[r[1]];
+        return `<tr><td class="nw">${r[0]}</td><td>${esc(d.label)}</td><td class="nw">${months[r[2]]}</td><td><span class="issue">${esc(D.issues[r[3]])}</span></td>
+          <td class="n ${deltaCls(r[4])}">${r[4] >= 0 ? "+" : ""}${money(r[4])}</td>
+          <td>${esc(r[5])}${r[7] ? ` <span class="ev">Source record #${r[7]}. ${esc(D.explanations[r[6]])}</span>` : `<span class="ev">${esc(D.explanations[r[6]])}</span>`}</td></tr>`; }).join("") + "</tbody>" : "";
+    $("#invMore").hidden = shown.length <= state.invShown;
+  }
+
+  // ---------- page 3 ----------
+  function renderForecast() {
+    const F = D.forecast; if (!F.length) return;
+    if (state.tds && F.some((f) => f.tds === state.tds)) state.fcTds = state.tds;
+    const f = F.find((x) => x.tds === state.fcTds) || F[0];
+    const testYear = f.bt.m[0]?.slice(0, 4);
+    let sa = 0, sb = 0, ss = 0;
+    F.forEach((x) => x.bt.a.forEach((a, i) => { if (x.bt.ok[i]) { sa += a; sb += Math.abs(a - x.bt.b[i]); ss += Math.abs(a - x.bt.s[i]); } }));
+    const wins = F.filter((x) => x.method !== "SARIMA").length;
+    $("#fcIntro").textContent = `Five stable, high-volume developments were chosen using data before ${testYear} only. The simple baseline (same month last year) matched or beat SARIMA at ${wins} of ${F.length}. Pooled WAPE: baseline ${(100 * sb / sa).toFixed(1)}%, SARIMA ${(100 * ss / sa).toFixed(1)}%.`;
+    $("#fcChips").innerHTML = F.map((x) => `<button class="chip" aria-pressed="${x.tds === f.tds}" data-tds="${x.tds}">${esc(nice(x.name))}</button>`).join("");
+
+    const s = D.series[f.tds];
+    const map = (arr) => months.map((m) => { const i = f.bt.m.indexOf(m); return i < 0 ? null : arr[i]; });
+    draw("#cBack", { type: "line",
+      data: { labels: months, datasets: [
+        { label: "Actual", data: s.k, borderColor: C.ink, backgroundColor: C.ink, borderWidth: 1.8, pointRadius: 0, spanGaps: false, tension: 0.15 },
+        { label: "Same month last year (baseline)", data: map(f.bt.b), borderColor: C.teal, backgroundColor: C.teal, borderDash: [5, 4], borderWidth: 2, pointRadius: 3 },
+        { label: "SARIMA", data: map(f.bt.s), borderColor: C.amber, backgroundColor: C.amber, borderWidth: 2, pointRadius: 3 } ] },
+      options: { interaction: { mode: "index", intersect: false }, plugins: { legend: { position: "top", align: "start" },
+          tooltip: { callbacks: { label: (x) => x.raw == null ? null : ` ${x.dataset.label}: ${(x.raw / 1e6).toFixed(2)} GWh` } } },
+        scales: { x: { grid: { display: false }, ticks: { maxRotation: 0, callback: (v, i) => months[i].endsWith("-01") ? months[i].slice(0, 4) : "" } },
+          y: { ticks: { callback: (v) => (v / 1e6).toFixed(1) }, title: { display: true, text: "GWh" } } } } });
+
+    $("#tMetrics").innerHTML = `<thead><tr><th>Development</th><th class="n">Months scored</th><th class="n">MAE baseline</th><th class="n">MAE SARIMA</th><th class="n">WAPE baseline</th><th class="n">WAPE SARIMA</th><th>Kept</th><th>Why</th></tr></thead><tbody>` +
+      F.map((x) => `<tr class="click" data-fc="${x.tds}" tabindex="0"><td>${esc(nice(x.name))}${x.tds === f.tds ? " ✓" : ""}</td><td class="n">${x.scored}</td>
+        <td class="n">${(x.mae[0] / 1e3).toFixed(0)} MWh</td><td class="n">${(x.mae[1] / 1e3).toFixed(0)} MWh</td>
+        <td class="n">${(100 * x.wape[0]).toFixed(1)}%</td><td class="n">${(100 * x.wape[1]).toFixed(1)}%</td>
+        <td class="method">${esc(x.method)}</td><td class="ev" style="margin:0">${esc(x.reason)}</td></tr>`).join("") + "</tbody>";
+
+    const key = { low: "lo", base: "base", high: "hi" }[state.scenario];
+    const om = F[0].out.m, K = om.map((_, i) => F.reduce((a, x) => a + (x.out.k[i] || 0), 0));
+    const S = om.map((_, i) => F.reduce((a, x) => a + (x.out[key][i] || 0), 0));
+    const tot = { lo: 0, base: 0, hi: 0 }; F.forEach((x) => ["lo", "base", "hi"].forEach((kk) => x.out[kk].forEach((v) => (tot[kk] += v || 0))));
+    $("#outIntro").textContent = `All five developments together: ${energy(K.reduce((a, b) => a + b, 0))} forecast for ${om[0]} to ${om[om.length - 1]}. Planning spend ${money(tot.lo)} (low), ${money(tot.base)} (base) and ${money(tot.hi)} (high). Each development uses the method that won its backtest.`;
+    $("#scChips").innerHTML = D.scenarios.map((sc) => `<button class="chip" aria-pressed="${state.scenario === sc.scenario.toLowerCase()}" data-sc="${sc.scenario.toLowerCase()}">${sc.scenario} cost</button>`).join("");
+    const cur = D.scenarios.find((x) => x.scenario.toLowerCase() === state.scenario);
+    $("#scNote").textContent = `${cur.scenario} scenario: ${cur.basis}. This is a planning estimate (forecast kWh × historical effective cost), not a bill forecast.`;
+    draw("#cOutK", { type: "bar", data: { labels: om, datasets: [{ label: "Forecast consumption (GWh)", data: K.map((v) => v / 1e6), backgroundColor: C.teal, borderRadius: 1 }] },
+      options: { plugins: { legend: { position: "top", align: "start" } }, scales: { x: { grid: { display: false }, ticks: { maxRotation: 0, callback: (v, i) => om[i].slice(5) } } } } });
+    draw("#cOutC", { type: "bar", data: { labels: om, datasets: [{ label: `Planning spend, ${cur.scenario.toLowerCase()} cost`, data: S, backgroundColor: C.total, borderRadius: 1 }] },
+      options: { plugins: { legend: { position: "top", align: "start" }, tooltip: { callbacks: { label: (x) => " " + money(x.raw) } } },
+        scales: { x: { grid: { display: false }, ticks: { maxRotation: 0, callback: (v, i) => om[i].slice(5) } }, y: { ticks: { callback: moneyTick } } } } });
+  }
+
+  // ---------- footer ----------
+  function renderFooter() {
+    const m = D.meta, q = D.quality.excluded;
+    $("#srcline").innerHTML = `Source: <a href="https://data.cityofnewyork.us/Housing-Development/Electric-Consumption-And-Cost-2010-Sep-2025-/jr24-e7cr">NYC Open Data, Electric Consumption and Cost</a>`;
+    $("#aboutData").textContent = `NYCHA monthly electricity bills published on NYC Open Data. This build uses a file covering revenue months ${m.raw_coverage} (${m.raw_rows.toLocaleString()} bill lines) and analyses ${m.analysis_window}: ${m.retained_rows.toLocaleString()} bill lines across ${m.developments} developments. Forecasts train on ${m.train_period} and are tested on ${m.test_period}. Built ${m.run_utc}.`;
+    $("#aboutClean").textContent = `Removed ${(q.exact_duplicate || 0).toLocaleString()} exact duplicate lines and ${((q.superseded_bill || 0) + (q.near_duplicate_same_bill || 0)).toLocaleString()} superseded versions of re-issued bills (the latest bill ID is kept). Credits, demand-only lines, estimated reads and unusual costs are flagged, not removed. Months without bills are shown as gaps.`;
+    const r = m.repo, L = [["Findings memo (PDF)", "reports/findings_memo.pdf"], ["Data-quality report", "reports/data_quality_report.md"],
+      ["Notebooks", "notebooks"], ["SQL and validation", "sql"], ["Source code", ""]];
+    $("#links").innerHTML = L.map(([t, p]) => `<li><a href="${r}${p ? "/blob/main/" + p : ""}">${t}</a></li>`).join("");
+  }
+
+  // ---------- wiring ----------
+  function renderActive() {
+    renderHeader();
+    if (state.tab === "p1") renderOverview(); else if (state.tab === "p2") renderDrivers(); else renderForecast();
+  }
+  function setDev(tds) {
+    state.tds = tds; state.invShown = 25;
+    $("#fDev").value = tds ? devBy[tds].label : "";
+    if (tds && state.borough && devBy[tds].borough !== state.borough) { state.borough = ""; $("#fBorough").value = ""; }
+    renderActive();
+  }
+  function setTab(id) {
+    state.tab = id;
+    ["p1", "p2", "p3"].forEach((p, i) => { const t = $("#t" + (i + 1)); const on = p === id;
+      t.setAttribute("aria-selected", on); t.tabIndex = on ? 0 : -1; $("#" + p).hidden = !on; });
+    renderActive();
+  }
+
+  $("#fYear").innerHTML = years.map((y) => `<option ${y === state.year ? "selected" : ""}>${y}</option>`).join("");
+  $("#fBorough").innerHTML = `<option value="">All boroughs</option>` + boroughs.map((b) => `<option value="${esc(b)}">${esc(nice(b))}</option>`).join("");
+  $("#devList").innerHTML = devs.map((d) => `<option value="${esc(d.label)}">${esc(nice(d.borough))}</option>`).join("");
+  $("#fYear").addEventListener("change", (e) => { state.year = +e.target.value; state.invShown = 25; renderActive(); });
+  $("#fBorough").addEventListener("change", (e) => { state.borough = e.target.value;
+    if (state.tds && devBy[state.tds].borough !== state.borough && state.borough) { state.tds = null; $("#fDev").value = ""; } renderActive(); });
+  $("#fDev").addEventListener("change", (e) => { const v = e.target.value.trim().toLowerCase();
+    const d = devs.find((x) => x.label.toLowerCase() === v) || devs.find((x) => x.label.toLowerCase().startsWith(v));
+    setDev(v && d ? d.tds : null); });
+  $("#clearBtn").addEventListener("click", () => { state.borough = ""; $("#fBorough").value = ""; state.year = years[years.length - 1];
+    $("#fYear").value = state.year; state.issue = -1; setDev(null); });
+  ["t1", "t2", "t3"].forEach((t, i) => $("#" + t).addEventListener("click", () => setTab("p" + (i + 1))));
+  $(".tabs").addEventListener("keydown", (e) => { if (!["ArrowRight", "ArrowLeft"].includes(e.key)) return;
+    const i = +state.tab.slice(1) + (e.key === "ArrowRight" ? 1 : -1); const n = ((i + 2) % 3) + 1; setTab("p" + n); $("#t" + n).focus(); });
+  document.addEventListener("click", (e) => {
+    const chip = e.target.closest(".chip"), row = e.target.closest("tr.click");
+    if (chip?.dataset.i != null) { state.issue = +chip.dataset.i; state.invShown = 25; renderInvestigations(); }
+    else if (chip?.dataset.tds) { state.fcTds = +chip.dataset.tds; if (state.tds) { state.tds = null; $("#fDev").value = ""; renderHeader(); } renderForecast(); }
+    else if (chip?.dataset.sc) { state.scenario = chip.dataset.sc; renderForecast(); }
+    else if (row?.dataset.tds) setDev(+row.dataset.tds);
+    else if (row?.dataset.b) { state.borough = state.borough === row.dataset.b ? "" : row.dataset.b; $("#fBorough").value = state.borough;
+      if (state.tds && state.borough && devBy[state.tds].borough !== state.borough) { state.tds = null; $("#fDev").value = ""; } renderActive(); }
+    else if (row?.dataset.fc) { state.fcTds = +row.dataset.fc; renderForecast(); }
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.matches("tr.click")) e.target.click(); });
+  $("#invMore").addEventListener("click", () => { state.invShown += 25; renderInvestigations(); });
+
+  renderFooter();
+  setTab("p1");
+})();
+</script>
+</body>
+</html>

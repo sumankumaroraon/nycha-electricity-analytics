@@ -1,0 +1,16 @@
+step,amount,kind,sort_order,year
+2019 cost,132240236.06,total,1,2020
+Consumption effect,65825619.705165334,delta,2,2020
+Effective-cost effect,-53876507.885165334,delta,3,2020
+Non-comparable (gaps / zero kWh),4223190.44,delta,4,2020
+2020 cost,148412538.32,total,5,2020
+2020 cost,148412538.32,total,1,2021
+Consumption effect,4302741.790838408,delta,2,2021
+Effective-cost effect,21926598.499161594,delta,3,2021
+Non-comparable (gaps / zero kWh),-87598.46,delta,4,2021
+2021 cost,174554280.15,total,5,2021
+2021 cost,174554280.15,total,1,2022
+Consumption effect,-2516282.6911279894,delta,2,2022
+Effective-cost effect,20468886.47112799,delta,3,2022
+Non-comparable (gaps / zero kWh),-6788322.25,delta,4,2022
+2022 cost,185718561.68,total,5,2022

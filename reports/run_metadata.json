@@ -1,0 +1,12 @@
+{
+  "run_utc": "2026-09-28 15:36 UTC",
+  "raw_file": "data/raw/Electric_Consumption_And_Cost.csv",
+  "raw_md5": "30f91c320c5c3aef05b280a150b8662d",
+  "raw_rows": 445111,
+  "raw_coverage": "2010-01 to 2023-01",
+  "analysis_window": "2019-01 to 2022-12",
+  "train_period": "2019-01 to 2021-12",
+  "test_period": "2022-01 to 2022-12",
+  "retained_rows": 159151,
+  "developments": 335
+}

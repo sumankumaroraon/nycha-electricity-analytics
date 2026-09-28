@@ -1,0 +1,19 @@
+# Data: raw source and large intermediates are reproducible, not committed
+data/raw/*.csv
+data/interim/*
+!data/interim/.gitkeep
+
+# Python / Jupyter
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+.pytest_cache/
+.venv/
+venv/
+
+# Power BI temp and OS files
+*.pbix.bak
+~$*
+.DS_Store
+Thumbs.db
